@@ -1,6 +1,6 @@
 /* 课程日历 Service Worker：离线缓存（缓存优先）+ 待办提醒通知点击处理 */
 'use strict';
-var CACHE = 'course-calendar-v2';
+var CACHE = 'course-calendar-v3';
 var CORE = [
   './index.html',
   './manifest.json',
@@ -45,6 +45,12 @@ function cachePut(request, response) {
 self.addEventListener('fetch', function (event) {
   var req = event.request;
   if (req.method !== 'GET') return;
+  var u = new URL(req.url);
+  /* sw.js 永不缓存，保证 Service Worker 能自我更新 */
+  if (u.origin === location.origin && u.pathname.indexOf('/sw.js') >= 0) {
+    event.respondWith(fetch(req));
+    return;
+  }
   if (req.mode === 'navigate') {
     event.respondWith(
       fetch(req).then(function (res) {
