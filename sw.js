@@ -1,6 +1,6 @@
-/* 我的日历 Service Worker：离线缓存，缓存优先 */
+/* 课程日历 Service Worker：离线缓存（缓存优先）+ 待办提醒通知点击处理 */
 'use strict';
-var CACHE = 'my-calendar-v1';
+var CACHE = 'course-calendar-v2';
 var CORE = [
   './index.html',
   './manifest.json',
@@ -62,6 +62,26 @@ self.addEventListener('fetch', function (event) {
         cachePut(req, res);
         return res;
       });
+    })
+  );
+});
+
+/* 通知点击：关闭通知并打开对应的待办日期 */
+self.addEventListener('notificationclick', function (event) {
+  event.notification.close();
+  var url = (event.notification.data && event.notification.data.url)
+    ? event.notification.data.url
+    : './index.html';
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (list) {
+      for (var i = 0; i < list.length; i++) {
+        if ('navigate' in list[i]) {
+          return list[i].navigate(url).then(function () {
+            return list[i].focus();
+          });
+        }
+      }
+      return clients.openWindow(url);
     })
   );
 });
