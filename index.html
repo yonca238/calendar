@@ -1112,7 +1112,8 @@ var CHECK_SVG='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke
 var BELL_SVG='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><path d="M6 9a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6z"/><path d="M10.3 20a2 2 0 0 0 3.4 0"/></svg>';
 var remindPickTarget=null;
 var remindedKey=KEY+'.rmd';
-var SUPPORT_TRIGGER=(typeof TimestampTrigger!=='undefined')&&('showTrigger' in (typeof Notification!=='undefined'?Notification.prototype:{}));
+var SUPPORT_TRIGGER=false;
+try{if(typeof TimestampTrigger!=='undefined'&&('showTrigger' in (typeof Notification!=='undefined'?Notification.prototype:{}))){new TimestampTrigger(Date.now()+60000);SUPPORT_TRIGGER=true;}}catch(e){SUPPORT_TRIGGER=false;}
 
 var data={marks:{},notes:{},todos:{}};
 var ws=1;                              /* 每周起始：1=周一，0=周日 */
@@ -1548,35 +1549,35 @@ function clearSWNotify(tag){
 }
 function ensureNotifyPerm(cb){
   if(!('Notification' in window)){toast('当前浏览器不支持通知提醒');return;}
+  if(location.protocol==='file:'){toast('本地文件模式不支持系统通知，请打开在线链接使用');return;}
   if(Notification.permission==='granted'){cb&&cb();return;}
-  if(Notification.permission==='denied'){toast('通知权限被拒绝，请在浏览器设置中开启后重试');return;}
-  Notification.requestPermission().then(function(p){
+  if(Notification.permission==='denied'){toast('通知权限被拒绝，请在浏览器地址栏左侧的权限设置中开启');return;}
+  try{Notification.requestPermission().then(function(p){
     if(p==='granted'){cb&&cb();}else{toast('未授权通知，无法提醒');}
-  });
+  });}catch(e){}
 }
 function scheduleRemind(iso,t){
-  if(!t.rm)return;
+  if(!t.rm)return 'none';
   var pick=new Date(parseISO(iso).getTime());
   var hm=t.rm.split(':');
   pick.setHours(+hm[0],+hm[1],0,0);
   var diff=pick.getTime()-Date.now();
-  if(diff<=0)return;
+  if(diff<=0)return 'none';
   if(SUPPORT_TRIGGER&&('serviceWorker' in navigator)){
     var tag='rm-'+iso+'-'+t.id;
-    navigator.serviceWorker.ready.then(function(reg){
-      try{
-        reg.showNotification('课程日历 · 待办提醒',{
+    try{
+      navigator.serviceWorker.ready.then(function(reg){
+        return reg.showNotification('课程日历 · 待办提醒',{
           body:'今天 '+t.rm+'：'+t.text,
           tag:tag,icon:'./icons/icon-192.png',badge:'./icons/icon-192.png',
           data:{iso:iso,url:'./index.html?d='+iso},
           showTrigger:new TimestampTrigger(pick.getTime())
         });
-        markSWReminded(tag);
-      }catch(e){}
-    }).catch(function(){});
-  }else{
-    toast('后台准点提醒需安卓 Chrome 并添加到主屏幕；页面打开时仍会准点提醒');
+      }).then(function(){markSWReminded(tag);}).catch(function(){});
+      return 'sw';
+    }catch(e){return 'page';}
   }
+  return 'page';
 }
 function checkReminders(){
   if(!('Notification' in window)||Notification.permission!=='granted')return;
@@ -1607,8 +1608,10 @@ $('remindPick').addEventListener('change',function(){
   t.rm=v;
   persist();renderTodos();renderGrid();renderTop();
   ensureNotifyPerm(function(){
-    scheduleRemind(sel,t);
-    toast('已设置提醒 '+sel+' '+v);
+    var mode=scheduleRemind(sel,t);
+    if(mode==='sw')toast('已设置提醒 '+sel+' '+v+'，到点将后台通知');
+    else if(mode==='page')toast('已设置提醒 '+sel+' '+v+'（页面打开时到点通知）');
+    else toast('已设置提醒 '+sel+' '+v);
   });
 });
 if('Notification' in window){
@@ -1622,7 +1625,7 @@ if('Notification' in window){
     }
   });
 }
-setInterval(checkReminders,30000);
+setInterval(checkReminders,15000);
 checkReminders();
 
 /* 首次进入：触摸设备显示滑动切换提示 */
